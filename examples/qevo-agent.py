@@ -21,7 +21,8 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 service = setup_qiskit_account()
-backend = service.least_busy(simulator=False, operational=True) 
+#backend = service.least_busy(simulator=False, operational=True) 
+backend = service.backend("ibm_fez")
 props = backend.properties()
 cfg   = backend.configuration()
 
@@ -30,7 +31,7 @@ props_str+="Qubit count: "+str(backend.num_qubits)+"\n"
 props_str+="Basis gates: "+json.dumps(backend.operation_names)+"\n\n"
 print(props_str)
 
-compiler = qevo.Compiler(backend)
+compiler = qevo.Compiler(backend, state_path=f"./qevo_{backend.name}")
 
 # Definición de estado
 class AgentState(TypedDict):
