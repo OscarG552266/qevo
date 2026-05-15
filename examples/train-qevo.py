@@ -15,11 +15,13 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 service = setup_qiskit_account()
-backend = service.least_busy(simulator=False, operational=True) 
+#backend = service.least_busy(simulator=False, operational=True)
+backend = service.backend("ibm_fez")
+
 props = backend.properties()
 cfg   = backend.configuration()
 
-compiler = qevo.Compiler(backend, learn=False)
+compiler = qevo.Compiler(backend, learn=False, state_path=f"./qevo_{backend.name}")
 
 # --- Generación de Puzzles de Prueba ---
 
