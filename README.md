@@ -33,9 +33,6 @@ pip install .
 - numpy>=1.24
 - qiskit>=1.0
 - qiskit-aer>=0.14
-
-Optional:
-
 - qiskit-ibm-runtime
 
 ---
