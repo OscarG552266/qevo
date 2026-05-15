@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qevo"
+version = "0.1.0"
+description = "Quantum circuit optimization framework using Bayesian strategy exploration, multilevel semantic verification, and hardware-aware optimization"
+readme = "README.md"
+requires-python = ">=3.0"
+
+authors = [
+    { name = "Oscar García" }
+]
+
+license = { file = "LICENSE" }
+
+keywords = [
+    "quantum",
+    "qiskit",
+    "quantum-computing",
+    "compiler",
+    "bayesian",
+    "optimization",
+    "transpilation"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Compilers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11"
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "qiskit>=1.0",
+    "qiskit-aer>=0.14"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "build",
+    "twine"
+]
+
+[project.urls]
+Homepage = "https://github.com/OscarG552266/qevo"
+Repository = "https://github.com/OscarG552266/qevo"
+Issues = "https://github.com/OscarG552266/qevo/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qevo*"]
+
+[tool.black]
+line-length = 88
