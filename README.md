@@ -54,6 +54,42 @@ This enables adaptive compilation tailored to both circuit characteristics and b
 
 ---
 
+## Quick Example
+
+```python
+import qevo
+from qiskit import QuantumCircuit
+from qiskit_ibm_runtime import QiskitRuntimeService
+
+service = QiskitRuntimeService(channel="ibm_quantum_platform")
+# backend = service.least_busy(simulator=False, operational=True)
+backend = service.backend("ibm_fez")
+
+qc = QuantumCircuit(2)
+qc.h(0)
+qc.cx(0, 1)
+
+compiler = qevo.Compiler(backend, state_path=f"./qevo_{backend.name}")
+
+results = compiler.evaluate(qc)
+performance = qevo.analyze_performance(results)
+
+print(performance)
+```
+---
+## 📝 Qevo Compiler Cheat-sheet
+
+Use these configurations within the `qevo.Compiler` to customize its behavior:
+
+| Parameter | Description | Default / Example |
+| :--- | :--- | :--- |
+| `state_path` | Path to the model. Use a shared directory for a global model or unique paths for per-backend models. | `./qevo_model` |
+| `learn` | Set to False for read-only mode (disables model updates). | `True` |
+| `transpiler_args` | Dictionary for **Qiskit transpiler options** (e.g., `optimization_level`). | `{}` |
+| `check_semantic_preservation` | Ensures the compiled circuit is **mathematically equivalent** to the original (this verification can be computationally intensive for large circuits). | `True` |
+
+---
+
 ## Core Concepts
 
 ### Bayesian Strategy Learning
@@ -83,17 +119,24 @@ This provides context-aware optimization instead of generic transpilation.
 
 ## Architecture
 
-`qevo` is composed of several internal modules:
+The `qevo` framework and its execution examples are structured as follows:
 
-### Core
-
-- `compiler.py` → optimization engine
-- `analyzer.py` → circuit structural analysis
-- `models.py` → Bayesian models
-- `rewards.py` → reward computation
-- `diagnostics.py` → backend diagnostics (LLM compatible)
-- `utils.py` → feature extraction helpers
-- `examples` → example scripts for testing the library.
+```text
+qevo/
+├── qevo/                      # Core Library
+│   ├── __init__.py            # Package initialization
+│   ├── compiler.py          # Adaptive optimization engine
+│   ├── analyzer.py          # Circuit structural & complexity analysis
+│   ├── models.py            # Bayesian linear model
+│   ├── rewards.py           # Reward computation & multi-signal scoring
+│   ├── diagnostics.py       # Hardware bottleneck & LLM-compatible reporting
+│   └── utils.py             # Feature extraction & helper functions
+│
+└── examples/                  # Sample Applications & Testing
+    ├── load_credentials.py    # IBM Quantum platform authentication helper
+    ├── train-qevo.py          # Training loop for continuous strategy learning
+    ├── test-qevo.py           # Benchmark script for evaluation verification
+    └── qevo-agent.py          # AI Agent integration (QuantumMaster framework)
 
 ---
 
@@ -190,30 +233,6 @@ Each strategy learns independently.
 
 ---
 
-## Quick Example
-
-```python
-import qevo
-from qiskit import QuantumCircuit
-from qiskit_ibm_runtime import QiskitRuntimeService
-
-service = QiskitRuntimeService(channel="ibm_quantum_platform")
-backend = service.least_busy(simulator=False, operational=True)
-
-qc = QuantumCircuit(2)
-qc.h(0)
-qc.cx(0, 1)
-
-compiler = qevo.Compiler(backend)
-
-results = compiler.evaluate(qc)
-performance = qevo.analyze_performance(results)
-
-print(performance)
-```
-
----
-
 ## Returned Metrics
 
 Evaluation returns:
@@ -279,5 +298,5 @@ Commercial use requires explicit written authorization.
 
 ## Author
 
-Oscar García  
+Oscar García
 OscarG552266
