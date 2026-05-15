@@ -263,7 +263,7 @@ Q-Evo is intended for:
 
 ## License
 
-QEVO Non-Commercial License v1.0
+Q-EVO Non-Commercial License v1.0
 
 Free for:
 
