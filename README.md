@@ -20,6 +20,8 @@ it evaluates, learns and improves strategy selection over time based on circuit 
 ---
 ## Installation
 
+From the project root directory:
+
 ```bash
 pip install .
 ```
@@ -79,6 +81,22 @@ Q-Evo inspects physical backend conditions after transpilation:
 - topology pressure
 
 This provides context-aware optimization instead of generic transpilation.
+
+---
+
+## Architecture
+
+`qevo` is composed of several internal modules:
+
+### Core
+
+- `compiler.py` → optimization engine
+- `analyzer.py` → circuit structural analysis
+- `models.py` → Bayesian models
+- `rewards.py` → reward computation
+- `diagnostics.py` → backend diagnostics (LLM compatible)
+- `utils.py` → feature extraction helpers
+- `examples` → example scripts for testing the library.
 
 ---
 
