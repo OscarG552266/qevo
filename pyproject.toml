@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qevo"
 version = "0.1.0"
-description = "Quantum circuit optimization framework using Bayesian strategy exploration, multilevel semantic verification, and hardware-aware optimization"
+description = "Adaptive quantum meta-compiler using Bayesian strategy learning, semantic equivalence verification, and hardware-aware optimization"
 readme = "README.md"
 requires-python = ">=3.0"
 
