@@ -39,16 +39,17 @@ for i in range(n_qubits):
 qc.x(0)
 qc.x(0)
 qc.name = "Linear_Path"
-
-results = compiler.evaluate(qc)
+print("Original:\n",qc)
+results, best_qc = compiler.evaluate(qc, include_best=True)
+print("Best:\n",best_qc)
 print("Output: \n",re.sub(r'\n\s+(\d+[,\n])',r'\g<1>',json.dumps(results, indent=4)))
 performance = qevo.analyze_performance(results)
-print(f"\n{'ESTRATEGIA':<15} | {'REWARD MEDIO':<15} | {'EFICIENCIA DEPTH'}")
+print(f"\n{'ESTRATEGIA':<15} | {'SCORE MEDIO':<15} | {'EFICIENCIA DEPTH'}")
 print("-" * 50)
 for strat, data in performance['strategies'].items():
-    avg_score = np.mean(data['avg_score'])
-    avg_depth = np.mean(data['avg_depth'])
-    std_dev = np.std(data['std_dev'])
+    avg_score = data['avg_score']
+    avg_depth = data['avg_depth']
+    std_dev = data['std_dev']
 
     # Marcador de consistencia
     consistency = "✅" if data['consistent'] else "❓"

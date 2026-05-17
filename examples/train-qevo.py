@@ -68,7 +68,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         qc = QuantumCircuit(4)
         qc.name="Estructura mínima"
         qc.h(0); qc.cx(0, 1); qc.cx(1, 2)
-        qc.measure_all()
         return qc
 
     # Cadena de RY y CX bidireccionales
@@ -79,7 +78,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         for i in range(n): qc.ry(np.pi/4, i)
         for i in range(n-1): qc.cx(i, i+1)
         for i in range(n-1): qc.cx(i+1, i)
-        qc.measure_all()
         return qc
 
     # Grafo de entrelazamiento denso
@@ -90,7 +88,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         for i in range(n): qc.h(i)
         for i in range(n):
             for j in range(i+1, n): qc.cx(i, j)
-        qc.measure_all()
         return qc
 
     # Rotaciones que se anulan en bucle
@@ -101,7 +98,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         for _ in range(40):
             for q in range(n):
                 qc.ry(np.pi/4, q); qc.rz(np.pi/3, q); qc.ry(-np.pi/4, q)
-        qc.measure_all()
         return qc
 
     # QFT estándar
@@ -109,7 +105,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         n = n_qubits if n_qubits else 8
         qc = QFT(num_qubits=n, approximation_degree=0, do_swaps=True)
         qc.name="QFT estándar"
-        qc.measure_all()
         return qc
 
     # Circuito de Clifford (Benchmark estándar)
@@ -117,7 +112,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         n = n_qubits if n_qubits else 8
         qc = random_clifford_circuit(num_qubits=n, num_gates=40)
         qc.name="Circuito de Clifford (Benchmark estándar)"
-        qc.measure_all()
         return qc
 
     # Conexiones cruzadas (Mirror)
@@ -127,7 +121,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         qc.name="Conexiones cruzadas (Mirror)"
         for i in range(n//2): qc.cx(i, n-1-i)
         for i in range(n//2): qc.cx(n-1-i, i)
-        qc.measure_all()
         return qc
 
     # Identidades puras (H-H, CX-CX)
@@ -138,7 +131,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
             qc.h(0); qc.h(0)
             qc.cx(0, 1); qc.cx(0, 1)
             qc.rx(np.pi/3, 2); qc.rx(-np.pi/3, 2)
-        qc.measure_all()
         return qc
 
     # Puzzle Topológico: Entrelazamiento Full
@@ -155,7 +147,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         
         qc = circuit.compose(redundant)
         qc.name = "Puzzle Topológico: Entrelazamiento Full"
-        qc.measure_all()
         return qc
 
     # Linear Path
@@ -167,7 +158,6 @@ def get_benchmark_circuit(circuit_id, n_qubits=None):
         for i in range(n): qc.rz(np.random.uniform(0, np.pi), i)
         qc.x(0); qc.x(0)
         qc.name = "Linear Path"
-        qc.measure_all()
         return qc
 
     else:
@@ -179,16 +169,16 @@ lista_de_circuitos = [get_benchmark_circuit(i) for i in range(1, 11)]
 for idx, qc in enumerate(lista_de_circuitos):
     nombre = getattr(qc, 'name', f"Puzzle_{idx+1}")
     print(f"{'='*60}\nENTRENANDO: {nombre} ({qc.num_qubits} qubits)\n{'='*60}")
-    results = compiler.evaluate(qc, shots=20)
+    results = compiler.evaluate(qc, iterations=20)
     performance = qevo.analyze_performance(results)
-    print(f"\n{'ESTRATEGIA':<15} | {'REWARD MEDIO':<15} | {'EFICIENCIA DEPTH'}")
+    print(f"\n{'ESTRATEGIA':<15} | {'SCORE MEDIO':<15} | {'EFICIENCIA DEPTH'}")
     print("-" * 50)
     for strat, data in performance['strategies'].items():
-        avg_score = np.mean(data['avg_score'])
-        avg_depth = np.mean(data['avg_depth'])
-        std_dev = np.std(data['std_dev'])
+        avg_score = data['avg_score']
+        avg_depth = data['avg_depth']
+        std_dev = data['std_dev']
         
-        # Marcador de consistencia (si std_dev es bajo, el agente está seguro)
+        # Marcador de consistencia
         consistency = "✅" if data['consistent'] else "❓"
         
         print(f"{strat:<15} | {avg_score:.4f} ({consistency}) | {avg_depth:.1f} capas")
