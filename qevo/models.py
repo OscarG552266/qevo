@@ -24,6 +24,8 @@ class BayesianLinear:
 
         self.mu = self.mu + (gain.flatten() * (y - self.mu @ x.flatten()))
         self.Sigma = self.Sigma - gain @ Sigma_x.T
+        # Asegurar simetría numérica para evitar colapsos en el muestreo
+        self.Sigma = 0.5 * (self.Sigma + self.Sigma.T) + 1e-6 * np.eye(self.dim)
     def save_model(self, filepath):
             """Guarda los parámetros del modelo en un archivo."""
             with open(filepath, 'wb') as f:

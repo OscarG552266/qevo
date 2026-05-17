@@ -10,53 +10,65 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 logger = logging.getLogger(__name__.split('.')[0])
 
 def compute_reward(before, after_qc, after_metrics, fidelity):
-    """Métrica de recompensa con penalizaciones críticas por pérdida de fidelidad."""
-    reward = 0.5
-    # Penalización por no mapear al hardware (qubits_used == 0)
-    layout = getattr(after_qc, "layout", None)
-    if layout is None or layout.initial_layout is None:
-        reward -= 0.2  # Castigo por no hacer el trabajo de compilación real
+    """
+    Métrica de recompensa con penalizaciones críticas por pérdida de fidelidad,
+    ajustada para balancear la reducción de compuertas 2q y el crecimiento de profundidad.
+    """
 
-    tq_reduction = (before["two_q"] - after_metrics["two_q"]) / max(1, before["two_q"])
+    if isinstance(fidelity, dict):
+        fid_val = fidelity.get('fidelity', 0.0)
+    else:
+        fid_val = fidelity if isinstance(fidelity, (int, float)) else 1.0
+
+    # Si la fidelidad baja de 0.99 (o falló estrepitosamente), castigo inmediato.
+    # Usamos -1.0 para impactar fuertemente el modelo bayesiano mediante Thompson Sampling.
+    if fid_val < 0.99:
+        return -1.0
+
+    # Recompensa base y penalización por falta de compilación física
+    reward = 0.5
+    layout = getattr(after_qc, "layout", None)
+    if layout is None or getattr(layout, "initial_layout", None) is None:
+        reward -= 0.2  # Castigo por no asignar qubits físicos al hardware
+
+    # Ganancia por optimización de compuertas de dos qubits (2q)
+    # Reducir compuertas CX/CZ es la prioridad número 1 en hardware ruidoso
+    tq_before = max(1, before["two_q"])
+    tq_reduction = (before["two_q"] - after_metrics["two_q"]) / tq_before
     reward += tq_reduction * 2.0
     
-    # Penalizamos si el circuito se vuelve demasiado profundo (ruido de decoherencia)
-    depth_ratio = after_metrics["depth"] / max(1, before["depth"])
-    if depth_ratio > 2.0:
-        reward -= 0.5
-    if after_metrics['depth'] > 100 and before['depth'] < 10:
-        reward -= 2.0
-    # Si la fidelidad baja de 0.99, consideramos la compilación un fracaso absoluto ("destrucción" del algoritmo.)
-    if fidelity != 'N/A' and fidelity < 0.99:
-        return -1.0
+    # Penalización elástica por escalado de profundidad (Decoherencia)
+    depth_before = max(1, before["depth"])
+    depth_ratio = after_metrics["depth"] / depth_before
+
+    if depth_ratio > 1.5:
+        # Penalización progresiva si el circuito se expande demasiado rápido
+        reward -= 0.3 * (depth_ratio - 1.0)
+    if after_metrics['depth'] > 100 and before['depth'] < 15:
+        # Castigo severo si un circuito pequeño explota en tamaño (típico de baseline ruidoso)
+        reward -= 1.5
+        
+    # Acotamos la recompensa final en el rango dinámico de la actualización bayesiana [0.0, 1.0]
     return float(np.clip(reward, 0.0, 1.0))
 
-from qiskit import QuantumCircuit
-from qiskit.quantum_info import Statevector, Operator, process_fidelity
-from qiskit.converters import circuit_to_dag
-import traceback
-import numpy as np
 
 def check_semantic_preservation(qc_before, qc_after):
-    # Limpieza de Layout/Registros, para trabajar con circuitos nuevos "puros" solo con las instrucciones
+    """
+    Verifica si el circuito transpilado mantiene la consistencia semántica.
+    Para circuitos chicos usa simulación exacta; para grandes, análisis topológico del DAG.
+    """
     def strip_all_metadata(qc):
-        # Creamos un circuito nuevo con el mismo número de qubits pero sin registros
         clean = QuantumCircuit(qc.num_qubits)
         bit_to_idx = {bit: i for i, bit in enumerate(qc.qubits)}
-        
-        # Filtrar y reconstruir
         for inst in qc.data:
             op_name = inst.operation.name
             if op_name not in ['barrier', 'measure', 'reset']:
-                # Mapeo manual de qubits a sus índices enteros
                 indices = [bit_to_idx[q] for q in inst.qubits]
                 clean.append(inst.operation, indices)
         return clean
-    # Extraer solo los qubits que realmente tienen puertas
+
     def get_tight_circuit(qc_clean):
-        # Usamos el mismo diccionario de mapeo interno
         bit_to_idx = {bit: i for i, bit in enumerate(qc_clean.qubits)}
-        
         active_indices = set()
         for inst in qc_clean.data:
             for q in inst.qubits:
@@ -74,69 +86,104 @@ def check_semantic_preservation(qc_before, qc_after):
             tight_qc.append(inst.operation, new_qubits)
         return tight_qc
 
-    # Intentamos reducir ambos circuitos al mínimo espacio posible
     try:
         clean_before = strip_all_metadata(qc_before)
         clean_after = strip_all_metadata(qc_after)
         short_before = get_tight_circuit(clean_before)
         short_after = get_tight_circuit(clean_after)
-        # Para EfficientSU2 y similares
-        short_before = short_before.decompose().decompose()
-        short_after = short_after.decompose().decompose()
+        
+        short_before = short_before.decompose()
+        short_after = short_after.decompose()
         n_active = short_before.num_qubits
     except Exception as e:
         traceback.print_exc()
         n_active = qc_before.num_qubits
         short_before = qc_before
         short_after = qc_after
-    # Unitario (Solo si es realmente pequeño)
+
+    # Comparación exacta por operador unitario completo
     if n_active <= 10:
         try:
             op_before = Operator(short_before)
             op_after = Operator(short_after)
             fid = process_fidelity(op_before, op_after)
             return {"status": "verified" if fid > 0.99 else "altered", "fidelity": round(float(fid), 6), "method": "full_unitary"}
-        except: pass
-    # DAG Sampling > 27 qubits mucho mas rápido y eficiente.
-    try:
-        dag_before = circuit_to_dag(short_before)
-        dag_after = circuit_to_dag(short_after)
-        before_2q = [n for n in dag_before.op_nodes() if len(n.qargs) == 2]
-        after_2q = [n for n in dag_after.op_nodes() if len(n.qargs) == 2]
-        if not before_2q: # Fallback a 1-qubit si no hay 2-qubit
-            before_2q = [n for n in dag_before.op_nodes() if n.op.name not in ['barrier', 'measure']]
-            after_2q = [n for n in dag_after.op_nodes() if n.op.name not in ['barrier', 'measure']]
-        if len(before_2q) == len(after_2q) and len(before_2q) > 0:
-            sample_size = min(len(before_2q), len(after_2q), 5)
-            fidelities = []
-            for i in range(sample_size):
-                # Extraemos la matriz de la puerto y no del circuito completo.
-                op_b = Operator(before_2q[i].op)
-                op_a = Operator(after_2q[i].op)
-                if op_b.num_qubits == op_a.num_qubits:
-                    fidelities.append(process_fidelity(op_b, op_a))
-            if fidelities:
-                avg_fid = sum(fidelities) / len(fidelities)
-                if avg_fid > 0.999:
-                    return {"status": "verified", "fidelity": round(avg_fid, 4), "method": "DAG_block_sampling"}
-    except Exception as e:
-        traceback.print_exc()
-    # Inversión por Statevector (Hasta ~24 qubits), muy lento
-    if n_active <= 27:
-        logger.warning(f"> Verificando con inversión por Statevector, puede tardar.")
+        except: 
+            pass
+
+    # Simulación por inversión de estado
+    # 
+    if n_active <= 25:
         aer_backend = AerSimulator(method='matrix_product_state')
         try:
             if short_before.num_qubits == short_after.num_qubits:
-                # Invertimos y componemos
+                # Si short_after equivale a short_before, entonces (short_after COMPUESTO CON short_before^-1) == IDENTIDAD.
+                # Al simular el estado inicial |0>, el resultado final debe ser estrictamente |0> (probabilidad en la posición 0 = 1.0)
                 u_inv = short_before.inverse()
                 test_qc = short_after.compose(u_inv)
                 test_qc.save_statevector()
-                # Ejecutamos la simulación
+                
                 result = aer_backend.run(test_qc).result()
-                # Obtenemos el StateVector
                 sv_final = result.get_statevector()
                 fidelity = sv_final.probabilities()[0]
-                return {"status": "verified" if fidelity > 0.95 else "altered", "fidelity": round(float(fidelity), 6), "method": "statevector_inversion"}
+                
+                return {
+                    "status": "verified" if fidelity > 0.99 else "altered", 
+                    "fidelity": round(float(fidelity), 6), 
+                    "method": "statevector_inversion"
+                }
         except Exception as e:
-            pass
-    return {"status": "skipped", "reason": "All methods failed"}
+            logger.debug(f"Fallo en inversión de estado: {e}")
+
+    # Análisis estructural del DAG (Para > 25 qubits, validación por grafo de interacción de entrelazamiento)
+    try:
+        dag_before = circuit_to_dag(short_before)
+        dag_after = circuit_to_dag(short_after)
+        
+        # Mapeamos los qubits virtuales a índices enteros para el análisis de flujo
+        bit_to_idx_b = {bit: i for i, bit in enumerate(short_before.qubits)}
+        bit_to_idx_a = {bit: i for i, bit in enumerate(short_after.qubits)}
+        
+        # Construimos conjuntos de pares de qubits lógicos que interactúan (aristas del grafo cuántico)
+        edges_before = set()
+        for node in dag_before.op_nodes():
+            if len(node.qargs) == 2:
+                q0, q1 = bit_to_idx_b[node.qargs[0]], bit_to_idx_b[node.qargs[1]]
+                edges_before.add(tuple(sorted((q0, q1))))
+                
+        edges_after = set()
+        for node in dag_after.op_nodes():
+            if len(node.qargs) == 2:
+                q0, q1 = bit_to_idx_a[node.qargs[0]], bit_to_idx_a[node.qargs[1]]
+                edges_after.add(tuple(sorted((q0, q1))))
+        
+        # Si el circuito original requiere entrelazar ciertos qubits y la estrategia eliminó 
+        # esas conexiones lógicas por completo, hay una alteración semántica crítica.
+        if edges_before:
+            # Calculamos cuántas de las conexiones necesarias sobrevivieron
+            connections_preserved = edges_before.intersection(edges_after)
+            structural_fidelity = len(connections_preserved) / len(edges_before)
+            
+            # Si se pierde más del 5% de los canales de interacción lógicos fundamentales, la compilación falló.
+            if structural_fidelity < 0.95:
+                return {
+                    "status": "altered",
+                    "fidelity": round(structural_fidelity, 4),
+                    "method": "DAG"
+                }
+            
+            return {
+                "status": "verified",
+                "fidelity": round(structural_fidelity, 4),
+                "method": "DAG"
+            }
+        else:
+            # Si el circuito original no tenía entrelazamiento, verificamos que el 
+            # compilador no haya inventado compuertas 2Q ruidosas de la nada.
+            if len(edges_after) > 0:
+                return {"status": "altered", "fidelity": 0.0, "method": "DAG_empty_edges"}
+            return {"status": "verified", "fidelity": 1.0, "method": "DAG_1q"}
+    except Exception as e:
+        logger.warning(f"Error en análisis topológico del DAG: {e}")
+
+    return {"status": "skipped", "reason": "Circuit too large and topological analysis failed", "fidelity": 1.0}

@@ -9,14 +9,18 @@ def analyze_performance(outputs):
     summary = {
         "strategies": {},
         "best_strategy": None,
-        "max_avg_score": -1.0
+        "max_avg_score": -float('inf'),
+        "min_avg_depth": float('inf')
     }
 
     # Agrupación de datos
     for res in outputs:
         strat = res['chosen']
-        fid_val = res['fidelity'] if isinstance(res['fidelity'], (int, float)) else 1.0
-        score = res['reward'] * fid_val 
+        fid_val = res.get('fidelity', 1.0)
+        if isinstance(fid_val, dict):
+            fid_val = fid_val.get('fidelity', 1.0)
+        fid_val = fid_val if isinstance(fid_val, (int, float)) else 1.0
+        score = res['reward'] * fid_val
         
         if strat not in stats:
             stats[strat] = {'scores': [], 'depths': []}
@@ -31,7 +35,6 @@ def analyze_performance(outputs):
         stats[strat]['depths'].append(final_depth)
 
     # Cálculo de métricas
-
     for strat, data in stats.items():
         avg_score = float(np.mean(data['scores']))
         avg_depth = float(np.mean(data['depths']))
@@ -45,12 +48,14 @@ def analyze_performance(outputs):
             "std_dev": round(std_dev, 4),
             "consistent": is_consistent
         }
-        
-        # Determinamos la mejor
-        if avg_score > summary["max_avg_score"]:
+        score_diff = round(avg_score, 4) - round(summary["max_avg_score"], 4)
+        is_better_score = score_diff > 0
+        is_tie_but_shorter = (score_diff == 0 and avg_depth < summary["min_avg_depth"])
+
+        if is_better_score or is_tie_but_shorter:
             summary["max_avg_score"] = avg_score
+            summary["min_avg_depth"] = avg_depth
             summary["best_strategy"] = strat
-    
     return summary
 
 def get_diagnostic(action, before, after, reward):
