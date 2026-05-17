@@ -34,6 +34,7 @@ pip install .
 - qiskit>=1.0
 - qiskit-aer>=0.14
 - qiskit-ibm-runtime
+- networkx>=3.0
 
 ---
 
@@ -144,21 +145,18 @@ qevo/
 
 A candidate circuit is accepted only if semantic consistency is preserved.
 
-Validation is performed in three layers:
+Validation is performed in three automated layers:
 
-### 1. Full unitary verification
+### 1. Full Unitary Verification (≤ 10 qubits)
+Compares operator matrices directly for exact mathematical equivalence.
 
-Compares operator matrices directly.
+### 2. Statevector Inversion Verification (11 to 25 qubits)
+Uses statevector inversion executed via the Matrix Product State (MPS) method in `AerSimulator`. This handles medium-sized circuits where full matrix expansion is computationally expensive.
 
-### 2. Statevector verification
+### 3. DAG Subgraph Verification (> 25 qubits)
+Analyzes structural consistency and topology over logical circuit regions, ensuring scaling for massive circuits where simulation is unfeasible.
 
-Used for larger circuits where matrix expansion is expensive.
-
-### 3. DAG subgraph verification
-
-Checks structural consistency over logical circuit regions.
-
-This hybrid validation enables scalable equivalence checks.
+Any semantic fidelity drop below the 99% threshold across these layers triggers an immediate validation failure and returns a strict `-1.0` penalty. This hybrid validation enables scalable, false-positive-free equivalence checks.
 
 ---
 
@@ -227,7 +225,7 @@ Hardware-aware transpilation.
 
 ### heavy_opt
 
-Aggressive optimization with controlled approximation.
+Aggressive optimization via structure pruning and gate cancellation techniques.
 
 Each strategy learns independently.
 
